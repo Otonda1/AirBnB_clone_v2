@@ -1,37 +1,55 @@
 #!/usr/bin/env bash
-
-# Install Nginx if not available
+#  A script that sets up your web servers for the deployment of web_static.
+sudo apt-get -y update
 if ! [ -x "$(command -v nginx)" ]; then
     sudo apt-get -y update
     sudo apt-get -y install nginx
 fi
+sudo mkdir -p /data/web_static/shared/
+sudo mkdir -p /data/web_static/releases/test/
+sudo touch /data/web_static/releases/test/index.html
+sudo chmod go+w /data/web_static/releases/test/index.html
 
-# Create directories if they don't exist
-sudo mkdir -p /data/web_static/releases/test
-sudo mkdir -p /data/web_static/shared
+html="<html>
+  <head>
+  </head>
+  <body>
+    Holberton School
+  </body>
+</html>"
+echo "$html" | sudo tee /data/web_static/releases/test/index.html > /dev/null
 
-# Create a fake HTML file
-echo "This is a test index page." | sudo tee /data/web_static/releases/test/index.html > /dev/null
+destination_link="/data/web_static/current"
 
-# Create or recreate the symbolic link
-sudo ln -sf /data/web_static/releases/test/ /data/web_static/current
-
-# Give ownership to the ubuntu user and group recursively
-sudo chown -R ubuntu:ubuntu /data/
-
-# Update Nginx configuration
-config_file="/etc/nginx/sites-available/default"
-config_block="
-location /hbnb_static {
-    alias /data/web_static/current/;
-}
-"
-
-# Add the config block to the Nginx configuration file
-if ! grep -q "location /hbnb_static" "$config_file"; then
-    sudo sed -i "/server {/a $config_block" "$config_file"
+if [ -L "$destination_link" ]; then
+        rm "$destination_link"
 fi
 
-# Restart Nginx
-sudo service nginx restart
+sudo ln -s /data/web_static/releases/test/ /data/web_static/current
 
+sudo chown -R ubuntu:ubuntu /data/
+
+config="server {
+    listen 80;
+    listen [::]:80 default_server;
+    root /var/www/html;
+    index index.html;
+
+    add_header X-Served-By \$hostname;
+    location /hbnb_static {
+        alias /data/web_static/current/;
+        index index.html index.htm;
+    }
+    location /redirect_me {
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
+    }
+
+    error_page 404 /404.html;
+    location /404.html {
+        try_files \$uri \$uri/ =404;
+    }
+}"
+
+echo "$config" | sudo tee /etc/nginx/sites-available/default > /dev/null;
+
+sudo service nginx restart;
